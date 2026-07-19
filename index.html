@@ -1514,13 +1514,33 @@ function handleBdBg(e) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function(ev) {
-    bdBgDataUrl = ev.target.result;
-    localStorage.setItem('bd_bg_dataurl', ev.target.result);
-    document.getElementById('bd-canvas-wrapper').style.backgroundImage = `url('${ev.target.result}')`;
-    showToast('Фон установлен');
+    compressImage(ev.target.result, 1600, 0.8, function(compressed) {
+      bdBgDataUrl = compressed;
+      try { localStorage.setItem('bd_bg_dataurl', compressed); } catch(e) {}
+      document.getElementById('bd-canvas-wrapper').style.backgroundImage = `url('${compressed}')`;
+      showToast('Фон установлен');
+    });
   };
   reader.readAsDataURL(file);
   e.target.value = '';
+}
+
+function compressImage(dataUrl, maxDim, quality, cb) {
+  const img = new Image();
+  img.onload = function() {
+    let w = img.width, h = img.height;
+    if (w > maxDim || h > maxDim) {
+      if (w > h) { h *= maxDim / w; w = maxDim; }
+      else { w *= maxDim / h; h = maxDim; }
+    }
+    const c = document.createElement('canvas');
+    c.width = Math.round(w);
+    c.height = Math.round(h);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    cb(c.toDataURL('image/jpeg', quality));
+  };
+  img.src = dataUrl;
 }
 
 function addBdImage() {
@@ -1532,27 +1552,28 @@ function handleBdImage(e) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function(ev) {
-    bdImageIdCounter++;
-    const img = new Image();
-    img.onload = function() {
-      const maxW = 300;
-      let w = img.width;
-      let h = img.height;
-      if (w > maxW) { h *= maxW / w; w = maxW; }
-      bdElements.push({
-        id: bdImageIdCounter,
-        type: 'image',
-        src: ev.target.result,
-        x: 50,
-        y: 50,
-        w: Math.round(w),
-        h: Math.round(h),
-        img: img
-      });
-      renderBdElements();
-      selectBdElement(bdImageIdCounter);
-    };
-    img.src = ev.target.result;
+    compressImage(ev.target.result, 800, 0.85, function(compressed) {
+      bdImageIdCounter++;
+      const img = new Image();
+      img.onload = function() {
+        let w = img.width;
+        let h = img.height;
+        if (w > 300) { h *= 300 / w; w = 300; }
+        bdElements.push({
+          id: bdImageIdCounter,
+          type: 'image',
+          src: compressed,
+          x: 50,
+          y: 50,
+          w: Math.round(w),
+          h: Math.round(h),
+          img: img
+        });
+        renderBdElements();
+        selectBdElement(bdImageIdCounter);
+      };
+      img.src = compressed;
+    });
   };
   reader.readAsDataURL(file);
   e.target.value = '';
@@ -1730,9 +1751,12 @@ function deleteBdElement(id) {
 }
 
 function replaceBdImage(id) {
-  const input = document.createElement('input');
+  const input = document.getElementById('bd-image-input-replace') || document.createElement('input');
+  input.id = 'bd-image-input-replace';
   input.type = 'file';
   input.accept = 'image/*';
+  input.style.display = 'none';
+  if (!input.parentNode) document.body.appendChild(input);
   input.onchange = function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -1740,17 +1764,20 @@ function replaceBdImage(id) {
     reader.onload = function(ev) {
       const el = bdElements.find(e2 => e2.id === id);
       if (!el) return;
-      el.src = ev.target.result;
-      const img = new Image();
-      img.onload = function() {
-        el.img = img;
-        renderBdElements();
-        selectBdElement(id);
-        showToast('Картинка заменена');
-      };
-      img.src = ev.target.result;
+      compressImage(ev.target.result, 800, 0.85, function(compressed) {
+        el.src = compressed;
+        const img = new Image();
+        img.onload = function() {
+          el.img = img;
+          renderBdElements();
+          selectBdElement(id);
+          showToast('Картинка заменена');
+        };
+        img.src = compressed;
+      });
     };
     reader.readAsDataURL(file);
+    input.value = '';
   };
   input.click();
 }
@@ -2472,25 +2499,34 @@ setInterval(autoSave, 2000);
 // INIT
 // ============================================
 window.addEventListener('DOMContentLoaded', function() {
-  autoLoadProject().then(() => {
-    if (!projectLoadedFromJson) {
-      loadWmPositions();
-      const hasBd = loadBdPositions();
-      if (!hasBd) initBirthday();
-      else renderBdElements();
-      const savedBg = localStorage.getItem('bd_bg_dataurl');
-      if (savedBg) {
-        bdBgDataUrl = savedBg;
-        document.getElementById('bd-canvas-wrapper').style.backgroundImage = `url('${savedBg}')`;
-      }
-    } else {
-      if (wmImage) initWmCanvas();
-      else renderWmElements();
-      if (bdElements.length === 0) initBirthday();
-      else renderBdElements();
+  const hasLocalWm = !!localStorage.getItem('wm_positions');
+  const hasLocalBd = !!localStorage.getItem('bd_positions');
+  const hasLocalData = hasLocalWm || hasLocalBd;
+
+  if (hasLocalData) {
+    loadWmPositions();
+    const hasBd = loadBdPositions();
+    if (!hasBd) initBirthday();
+    else renderBdElements();
+    const savedBg = localStorage.getItem('bd_bg_dataurl');
+    if (savedBg) {
+      bdBgDataUrl = savedBg;
+      document.getElementById('bd-canvas-wrapper').style.backgroundImage = `url('${savedBg}')`;
     }
     scaleBdCanvas();
-  });
+  } else {
+    autoLoadProject().then(() => {
+      if (!projectLoadedFromJson) {
+        initBirthday();
+      } else {
+        if (wmImage) initWmCanvas();
+        else renderWmElements();
+        if (bdElements.length === 0) initBirthday();
+        else renderBdElements();
+      }
+      scaleBdCanvas();
+    });
+  }
   window.addEventListener('resize', scaleBdCanvas);
 });
 </script>
