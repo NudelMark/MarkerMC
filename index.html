@@ -1845,7 +1845,10 @@ function stopBdDrag() {
     bdDragging = false;
     bdResizing = false;
     if (bdSelected && currentSection === 'birthday') {
-      requestAnimationFrame(() => renderBdElements());
+      requestAnimationFrame(() => {
+        renderBdElements();
+        selectBdElement(bdSelected);
+      });
     }
   }
 }
