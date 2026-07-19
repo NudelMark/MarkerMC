@@ -978,6 +978,12 @@ function switchSection(name) {
   document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === 'section-' + name));
   closePanel();
   closeMobileSidebar();
+  if (name === 'birthday') {
+    requestAnimationFrame(() => {
+      scaleBdCanvas();
+      renderBdElements();
+    });
+  }
 }
 
 function toggleSidebar() {
@@ -2386,6 +2392,7 @@ function scaleBdCanvas() {
   if (zoomBtn) zoomBtn.style.display = isMobile ? 'inline-flex' : 'none';
   if (isMobile) {
     const availW = area.clientWidth;
+    if (availW < 10) return;
     const availH = window.innerHeight - 240;
     bdScale = Math.min(availW / 800, availH / 600, 1);
     const finalScale = bdScale * bdUserScale;
