@@ -2316,6 +2316,9 @@ function applyProjectData(data) {
       bdBgDataUrl = data.birthday.bgDataUrl;
       localStorage.setItem('bd_bg_dataurl', bdBgDataUrl);
       document.getElementById('bd-canvas-wrapper').style.backgroundImage = `url('${bdBgDataUrl}')`;
+    } else {
+      bdBgDataUrl = null;
+      document.getElementById('bd-canvas-wrapper').style.backgroundImage = "url('HappyFon.jpg')";
     }
     renderBdElements();
   }
@@ -2363,11 +2366,14 @@ async function autoLoadProject() {
     const file = await handle.getFile();
     const text = await file.text();
     applyProjectData(JSON.parse(text));
+    projectLoadedFromJson = true;
     showToast('Проект восстановлен');
   } catch(e) {
     await fetchAndLoadProjectJson();
   }
 }
+
+let projectLoadedFromJson = false;
 
 async function fetchAndLoadProjectJson() {
   try {
@@ -2375,6 +2381,7 @@ async function fetchAndLoadProjectJson() {
     if (!resp.ok) return;
     const data = await resp.json();
     applyProjectData(data);
+    projectLoadedFromJson = true;
     showToast('Проект загружен с сервера');
   } catch(e) {}
 }
@@ -2466,14 +2473,21 @@ setInterval(autoSave, 2000);
 // ============================================
 window.addEventListener('DOMContentLoaded', function() {
   autoLoadProject().then(() => {
-    loadWmPositions();
-    const hasBd = loadBdPositions();
-    if (!hasBd) initBirthday();
-    else renderBdElements();
-    const savedBg = localStorage.getItem('bd_bg_dataurl');
-    if (savedBg) {
-      bdBgDataUrl = savedBg;
-      document.getElementById('bd-canvas-wrapper').style.backgroundImage = `url('${savedBg}')`;
+    if (!projectLoadedFromJson) {
+      loadWmPositions();
+      const hasBd = loadBdPositions();
+      if (!hasBd) initBirthday();
+      else renderBdElements();
+      const savedBg = localStorage.getItem('bd_bg_dataurl');
+      if (savedBg) {
+        bdBgDataUrl = savedBg;
+        document.getElementById('bd-canvas-wrapper').style.backgroundImage = `url('${savedBg}')`;
+      }
+    } else {
+      if (wmImage) initWmCanvas();
+      else renderWmElements();
+      if (bdElements.length === 0) initBirthday();
+      else renderBdElements();
     }
     scaleBdCanvas();
   });
