@@ -1514,11 +1514,14 @@ function handleBdBg(e) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = function(ev) {
-    compressImage(ev.target.result, 1600, 0.8, function(compressed) {
+    compressImage(ev.target.result, 1200, 0.7, function(compressed) {
       bdBgDataUrl = compressed;
-      try { localStorage.setItem('bd_bg_dataurl', compressed); } catch(e) {}
-      document.getElementById('bd-canvas-wrapper').style.backgroundImage = `url('${compressed}')`;
-      showToast('Фон установлен');
+      try {
+        localStorage.setItem('bd_bg_dataurl', compressed);
+        showToast('Фон установлен');
+      } catch(e) {
+        showToast('Ошибка: фото слишком большое. Попробуйте файл поменьше.');
+      }
     });
   };
   reader.readAsDataURL(file);
@@ -2011,20 +2014,30 @@ function saveBirthdayResult() {
 
 // Save/load birthday positions
 function saveBdPositions() {
-  const data = bdElements.map(e => ({
-    id: e.id, type: e.type, content: e.content, x: e.x, y: e.y, w: e.w, h: e.h,
-    fontSize: e.fontSize, color: e.color, fontFamily: e.fontFamily, fontWeight: e.fontWeight,
-    fontStyle: e.fontStyle, src: e.src
-  }));
-  localStorage.setItem('bd_positions', JSON.stringify(data));
-  localStorage.setItem('bd_image_counter', bdImageIdCounter);
+  const data = {
+    bg: bdBgDataUrl || null,
+    counter: bdImageIdCounter,
+    elements: bdElements.map(e => ({
+      id: e.id, type: e.type, content: e.content, x: e.x, y: e.y, w: e.w, h: e.h,
+      fontSize: e.fontSize, color: e.color, fontFamily: e.fontFamily, fontWeight: e.fontWeight,
+      fontStyle: e.fontStyle, src: e.type === 'text' ? undefined : e.src
+    }))
+  };
+  try {
+    localStorage.setItem('bd_positions', JSON.stringify(data));
+  } catch(e) {
+    data.elements = data.elements.map(el => ({ ...el, src: undefined }));
+    try { localStorage.setItem('bd_positions', JSON.stringify(data)); } catch(e2) {}
+  }
 }
 
 function loadBdPositions() {
   try {
-    const data = JSON.parse(localStorage.getItem('bd_positions'));
-    if (!data || !data.length) return false;
-    bdElements = data.map(d => {
+    const raw = JSON.parse(localStorage.getItem('bd_positions'));
+    if (!raw) return false;
+    const list = Array.isArray(raw) ? raw : (raw.elements || []);
+    if (!list.length) return false;
+    bdElements = list.map(d => {
       if (d.type === 'image' && d.src) {
         const img = new Image();
         img.src = d.src;
@@ -2033,7 +2046,12 @@ function loadBdPositions() {
       return d;
     });
     const maxId = bdElements.reduce((m, e) => Math.max(m, e.id), 0);
-    bdImageIdCounter = parseInt(localStorage.getItem('bd_image_counter')) || maxId;
+    bdImageIdCounter = (Array.isArray(raw) ? parseInt(localStorage.getItem('bd_image_counter')) : raw.counter) || maxId;
+    const savedBg = (Array.isArray(raw) ? localStorage.getItem('bd_bg_dataurl') : raw.bg) || localStorage.getItem('bd_bg_dataurl');
+    if (savedBg) {
+      bdBgDataUrl = savedBg;
+      document.getElementById('bd-canvas-wrapper').style.backgroundImage = `url('${savedBg}')`;
+    }
     return true;
   } catch(e) { return false; }
 }
@@ -2500,7 +2518,7 @@ setInterval(autoSave, 2000);
 // ============================================
 window.addEventListener('DOMContentLoaded', function() {
   const hasLocalWm = !!localStorage.getItem('wm_positions');
-  const hasLocalBd = !!localStorage.getItem('bd_positions');
+  const hasLocalBd = !!localStorage.getItem('bd_positions') || !!localStorage.getItem('bd_bg_dataurl');
   const hasLocalData = hasLocalWm || hasLocalBd;
 
   if (hasLocalData) {
@@ -2508,11 +2526,6 @@ window.addEventListener('DOMContentLoaded', function() {
     const hasBd = loadBdPositions();
     if (!hasBd) initBirthday();
     else renderBdElements();
-    const savedBg = localStorage.getItem('bd_bg_dataurl');
-    if (savedBg) {
-      bdBgDataUrl = savedBg;
-      document.getElementById('bd-canvas-wrapper').style.backgroundImage = `url('${savedBg}')`;
-    }
     scaleBdCanvas();
   } else {
     autoLoadProject().then(() => {
